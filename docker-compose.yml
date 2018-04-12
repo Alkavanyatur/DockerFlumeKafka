@@ -1,0 +1,119 @@
+version: "2.0"
+services:
+   curso-docker-ui:
+    image: uifd/ui-for-docker
+    container_name: docker-ui
+    hostname: docker-ui
+    privileged: true
+    ports:
+      - "9999:9000"
+    volumes:
+      -  /var/run/docker.sock:/var/run/docker.sock
+  
+   curso-hadoop:
+     image: smizy/hadoop-base
+     container_name: hadoop
+     hostname: hadoop
+     ports:
+       - "50071:50071"
+       - "50076:50076"
+       - "8021:8021"
+
+   curso-zookeeper:
+     image: jplock/zookeeper
+     hostname: zookeeper
+     ports:
+       - "2188:2188"
+     environment:
+      ZOOKEEPER_CLIENT_PORT: 2188
+      ZOOKEEPER_TICK_TIME: 2000
+
+   curso-flume:
+     image: elorzaa/flume:v0.1
+     container_name: flume
+     hostname: flume
+     ports:
+       - "44441:44441"
+       - "44442:44442"
+       - "44443:44443"
+     volumes:
+       - ./practica_flume_kafka.conf:/opt/flume-config/flume.conf
+     environment:
+       FLUME_AGENT_NAME: "tweets_name"
+
+   curso-kafka:
+    image: wurstmeister/kafka
+    depends_on:
+      - curso-zookeeper
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: "kafka"
+      KAFKA_ADVERTISED_PORT: "9093"
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2188" 
+      KAFKA_CREATE_TOPICS: "tweets_name"
+      KAFKA_ZOOKEEPER_TIMEOUT_MS: 36000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+   curso-master:
+     image: gettyimages/spark
+     container_name: master
+     hostname: master
+     command: bin/spark-class org.apache.spark.deploy.master.Master -h master
+     environment:
+       MASTER: spark://master:7077
+       SPARK_CONF_DIR: /conf
+       SPARK_PUBLIC_DNS: localhost
+     links:
+       - curso-hadoop:curso-hadoop
+     expose:
+       - 7001
+       - 7002
+       - 7003
+       - 7004
+       - 7005
+       - 7006
+       - 7077
+       - 6066
+     ports:
+       - 4040:4040
+       - 6066:6066
+       - 7077:7077
+       - 8080:8080
+     volumes:
+       - ./conf/master:/conf
+       - ./data:/tmp/data
+
+   curso-worker:
+     image: gettyimages/spark
+     hostname: worker
+     command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://master:7077
+     environment:
+       SPARK_CONF_DIR: /conf
+       SPARK_WORKER_CORES: 1
+       SPARK_WORKER_MEMORY: 2g
+       SPARK_WORKER_PORT: 8881
+       SPARK_WORKER_WEBUI_PORT: 8081
+       SPARK_PUBLIC_DNS: worker
+     links:
+       - curso-master:curso-master
+     expose:
+       - 7012
+       - 7013
+       - 7014
+       - 7015
+       - 7016
+       - 8881
+     ports:
+       - 8081
+     volumes:
+       - ./conf/worker:/conf
+       - ./data:/tmp/data
+
+networks:
+  vnet:
+    external:
+      name: vnet
